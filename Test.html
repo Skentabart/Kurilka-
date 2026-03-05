@@ -3,9 +3,9 @@
 <head>
 
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 
-<title>Secure P2P Messenger</title>
+<title>P2P Secure Messenger</title>
 
 <style>
 
@@ -21,10 +21,10 @@ height:100vh;
 
 #top{
 padding:10px;
-background:#1b1b1b;
+background:#1a1a1a;
 display:flex;
 flex-direction:column;
-gap:6px;
+gap:5px;
 }
 
 #code{
@@ -40,34 +40,35 @@ gap:5px;
 button{
 flex:1;
 padding:10px;
-background:#333;
 border:none;
+background:#333;
 color:white;
 border-radius:6px;
 }
 
 #status{
 font-size:12px;
-color:#7cff7c;
+color:#8cff8c;
 }
 
 #chat{
 flex:1;
 overflow:auto;
 padding:10px;
+display:flex;
+flex-direction:column;
 }
 
 .msg{
 background:#1f1f1f;
 padding:10px;
-margin:5px 0;
 border-radius:10px;
+margin:5px 0;
 max-width:80%;
-word-wrap:break-word;
 }
 
 .me{
-background:#2e5fff;
+background:#2b5cff;
 align-self:flex-end;
 }
 
@@ -78,25 +79,27 @@ margin-top:5px;
 }
 
 #bottom{
-
 display:flex;
-padding:6px;
-background:#1b1b1b;
 gap:5px;
-
+padding:6px;
+background:#1a1a1a;
 }
 
 #msg{
-
 flex:1;
 padding:10px;
 border:none;
 border-radius:6px;
-
 }
 
 #file{
 display:none;
+}
+
+#typing{
+font-size:12px;
+color:#aaa;
+padding-left:10px;
 }
 
 </style>
@@ -112,10 +115,9 @@ display:none;
 <div id="buttons">
 
 <button onclick="createConn()">Create</button>
-
 <button onclick="joinConn()">Connect</button>
-
 <button onclick="copyCode()">Copy</button>
+<button onclick="showQR()">QR</button>
 
 </div>
 
@@ -123,7 +125,11 @@ display:none;
 
 </div>
 
+<canvas id="qr" style="display:none;margin:auto"></canvas>
+
 <div id="chat"></div>
+
+<div id="typing"></div>
 
 <div id="bottom">
 
@@ -133,17 +139,23 @@ display:none;
 
 <button onclick="file.click()">📎</button>
 
+<button onclick="voice()">🎤</button>
+
 <input type="file" id="file">
 
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+
 <script>
 
-let pc = new RTCPeerConnection();
+let pc=new RTCPeerConnection();
 
 let channel;
 
 let connected=false;
+
+let destroyTimer=0;
 
 function setStatus(t){
 status.innerText=t;
@@ -169,11 +181,11 @@ receive(JSON.parse(e.data));
 
 async function createConn(){
 
-channel = pc.createDataChannel("chat");
+channel=pc.createDataChannel("chat");
 
 setupChannel();
 
-let offer = await pc.createOffer();
+let offer=await pc.createOffer();
 
 await pc.setLocalDescription(offer);
 
@@ -185,11 +197,11 @@ code.value=btoa(JSON.stringify(pc.localDescription));
 
 async function joinConn(){
 
-let offer = JSON.parse(atob(code.value));
+let offer=JSON.parse(atob(code.value));
 
 await pc.setRemoteDescription(offer);
 
-let answer = await pc.createAnswer();
+let answer=await pc.createAnswer();
 
 await pc.setLocalDescription(answer);
 
@@ -199,20 +211,12 @@ code.value=btoa(JSON.stringify(pc.localDescription));
 
 }
 
-pc.onicecandidate=e=>{};
-
 function waitIce(){
 
 return new Promise(resolve=>{
-
 pc.onicecandidate=e=>{
-
-if(!e.candidate){
-resolve();
-}
-
+if(!e.candidate) resolve();
 };
-
 });
 
 }
@@ -231,14 +235,27 @@ chat.appendChild(div);
 
 chat.scrollTop=chat.scrollHeight;
 
+if(destroyTimer){
+
+setTimeout(()=>{
+div.remove();
+},destroyTimer);
+
+}
+
 }
 
 function receive(data){
 
+typing.innerText="";
+
 if(data.type==="text"){
-
 addMsg(data.text);
+}
 
+if(data.type==="typing"){
+typing.innerText="Peer typing...";
+setTimeout(()=>typing.innerText="",1000);
 }
 
 if(data.type==="file"){
@@ -250,9 +267,7 @@ div.className="msg";
 if(data.mime.startsWith("image")){
 
 let img=document.createElement("img");
-
 img.src=data.data;
-
 div.appendChild(img);
 
 }
@@ -260,11 +275,8 @@ div.appendChild(img);
 else if(data.mime.startsWith("video")){
 
 let v=document.createElement("video");
-
 v.src=data.data;
-
 v.controls=true;
-
 div.appendChild(v);
 
 }
@@ -272,11 +284,8 @@ div.appendChild(v);
 else{
 
 let a=document.createElement("a");
-
 a.href=data.data;
-
 a.download=data.name;
-
 a.innerText="Download "+data.name;
 
 div.appendChild(a);
@@ -287,9 +296,19 @@ chat.appendChild(div);
 
 }
 
+if(data.type==="voice"){
+
+let audio=new Audio(data.data);
+
+audio.controls=true;
+
+chat.appendChild(audio);
+
 }
 
-async function sendMsg(){
+}
+
+function sendMsg(){
 
 if(!connected) return;
 
@@ -307,6 +326,16 @@ addMsg(text,true);
 msg.value="";
 
 }
+
+msg.oninput=()=>{
+
+if(channel && connected){
+
+channel.send(JSON.stringify({type:"typing"}));
+
+}
+
+};
 
 file.onchange=()=>{
 
@@ -332,6 +361,49 @@ reader.readAsDataURL(f);
 function copyCode(){
 
 navigator.clipboard.writeText(code.value);
+
+}
+
+function showQR(){
+
+qr.style.display="block";
+
+QRCode.toCanvas(qr,code.value);
+
+}
+
+async function voice(){
+
+let stream=await navigator.mediaDevices.getUserMedia({audio:true});
+
+let rec=new MediaRecorder(stream);
+
+let chunks=[];
+
+rec.ondataavailable=e=>chunks.push(e.data);
+
+rec.onstop=()=>{
+
+let blob=new Blob(chunks);
+
+let reader=new FileReader();
+
+reader.onload=()=>{
+
+channel.send(JSON.stringify({
+type:"voice",
+data:reader.result
+}));
+
+};
+
+reader.readAsDataURL(blob);
+
+};
+
+rec.start();
+
+setTimeout(()=>rec.stop(),3000);
 
 }
 
