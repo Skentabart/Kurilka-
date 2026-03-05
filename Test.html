@@ -5,14 +5,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 
-<title>P2P Secure Messenger</title>
+<title>P2P Messenger</title>
 
 <style>
 
 body{
 margin:0;
 font-family:sans-serif;
-background:#0f0f0f;
+background:#111;
 color:white;
 display:flex;
 flex-direction:column;
@@ -21,34 +21,22 @@ height:100vh;
 
 #top{
 padding:10px;
-background:#1a1a1a;
-display:flex;
-flex-direction:column;
-gap:5px;
+background:#1c1c1c;
 }
 
 #code{
 width:100%;
-padding:8px;
-}
-
-#buttons{
-display:flex;
-gap:5px;
+padding:10px;
+margin-bottom:5px;
 }
 
 button{
-flex:1;
 padding:10px;
+margin:2px;
 border:none;
 background:#333;
 color:white;
 border-radius:6px;
-}
-
-#status{
-font-size:12px;
-color:#8cff8c;
 }
 
 #chat{
@@ -60,7 +48,7 @@ flex-direction:column;
 }
 
 .msg{
-background:#1f1f1f;
+background:#222;
 padding:10px;
 border-radius:10px;
 margin:5px 0;
@@ -68,21 +56,14 @@ max-width:80%;
 }
 
 .me{
-background:#2b5cff;
+background:#2e63ff;
 align-self:flex-end;
-}
-
-img,video{
-max-width:200px;
-border-radius:8px;
-margin-top:5px;
 }
 
 #bottom{
 display:flex;
-gap:5px;
-padding:6px;
-background:#1a1a1a;
+padding:5px;
+background:#1c1c1c;
 }
 
 #msg{
@@ -92,14 +73,15 @@ border:none;
 border-radius:6px;
 }
 
-#file{
+#qr{
 display:none;
+width:250px;
+margin:auto;
 }
 
-#typing{
-font-size:12px;
-color:#aaa;
-padding-left:10px;
+#reader{
+display:none;
+width:100%;
 }
 
 </style>
@@ -112,39 +94,33 @@ padding-left:10px;
 
 <input id="code" placeholder="connection code">
 
-<div id="buttons">
+<br>
 
-<button onclick="createConn()">Create</button>
-<button onclick="joinConn()">Connect</button>
-<button onclick="copyCode()">Copy</button>
-<button onclick="showQR()">QR</button>
-
-</div>
+<button onclick="createOffer()">Create connection</button>
+<button onclick="createAnswer()">Connect</button>
+<button onclick="copyCode()">Copy code</button>
+<button onclick="showQR()">Show QR</button>
+<button onclick="scanQR()">Scan QR</button>
 
 <div id="status">Not connected</div>
 
 </div>
 
-<canvas id="qr" style="display:none;margin:auto"></canvas>
+<canvas id="qr"></canvas>
+
+<div id="reader"></div>
 
 <div id="chat"></div>
-
-<div id="typing"></div>
 
 <div id="bottom">
 
 <input id="msg" placeholder="message">
 
-<button onclick="sendMsg()">Send</button>
-
-<button onclick="file.click()">📎</button>
-
-<button onclick="voice()">🎤</button>
-
-<input type="file" id="file">
+<button onclick="send()">Send</button>
 
 </div>
 
+<script src="https://unpkg.com/html5-qrcode"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 
 <script>
@@ -155,9 +131,7 @@ let channel;
 
 let connected=false;
 
-let destroyTimer=0;
-
-function setStatus(t){
+function log(t){
 status.innerText=t;
 }
 
@@ -170,16 +144,16 @@ function setupChannel(){
 
 channel.onopen=()=>{
 connected=true;
-setStatus("Connected");
+log("Connected");
 };
 
 channel.onmessage=e=>{
-receive(JSON.parse(e.data));
+addMsg(e.data,false);
 };
 
 }
 
-async function createConn(){
+async function createOffer(){
 
 channel=pc.createDataChannel("chat");
 
@@ -191,11 +165,13 @@ await pc.setLocalDescription(offer);
 
 await waitIce();
 
-code.value=btoa(JSON.stringify(pc.localDescription));
+let codeStr=btoa(JSON.stringify(pc.localDescription));
+
+code.value=codeStr;
 
 }
 
-async function joinConn(){
+async function createAnswer(){
 
 let offer=JSON.parse(atob(code.value));
 
@@ -207,119 +183,33 @@ await pc.setLocalDescription(answer);
 
 await waitIce();
 
-code.value=btoa(JSON.stringify(pc.localDescription));
+let codeStr=btoa(JSON.stringify(pc.localDescription));
+
+code.value=codeStr;
 
 }
 
 function waitIce(){
 
 return new Promise(resolve=>{
+
 pc.onicecandidate=e=>{
+
 if(!e.candidate) resolve();
+
 };
+
 });
 
 }
 
-function addMsg(text,me=false){
-
-let div=document.createElement("div");
-
-div.className="msg";
-
-if(me) div.classList.add("me");
-
-div.innerText=text;
-
-chat.appendChild(div);
-
-chat.scrollTop=chat.scrollHeight;
-
-if(destroyTimer){
-
-setTimeout(()=>{
-div.remove();
-},destroyTimer);
-
-}
-
-}
-
-function receive(data){
-
-typing.innerText="";
-
-if(data.type==="text"){
-addMsg(data.text);
-}
-
-if(data.type==="typing"){
-typing.innerText="Peer typing...";
-setTimeout(()=>typing.innerText="",1000);
-}
-
-if(data.type==="file"){
-
-let div=document.createElement("div");
-
-div.className="msg";
-
-if(data.mime.startsWith("image")){
-
-let img=document.createElement("img");
-img.src=data.data;
-div.appendChild(img);
-
-}
-
-else if(data.mime.startsWith("video")){
-
-let v=document.createElement("video");
-v.src=data.data;
-v.controls=true;
-div.appendChild(v);
-
-}
-
-else{
-
-let a=document.createElement("a");
-a.href=data.data;
-a.download=data.name;
-a.innerText="Download "+data.name;
-
-div.appendChild(a);
-
-}
-
-chat.appendChild(div);
-
-}
-
-if(data.type==="voice"){
-
-let audio=new Audio(data.data);
-
-audio.controls=true;
-
-chat.appendChild(audio);
-
-}
-
-}
-
-function sendMsg(){
+function send(){
 
 if(!connected) return;
 
 let text=msg.value;
 
-if(!text) return;
-
-channel.send(JSON.stringify({
-type:"text",
-text:text
-}));
+channel.send(text);
 
 addMsg(text,true);
 
@@ -327,36 +217,21 @@ msg.value="";
 
 }
 
-msg.oninput=()=>{
+function addMsg(t,me){
 
-if(channel && connected){
+let div=document.createElement("div");
 
-channel.send(JSON.stringify({type:"typing"}));
+div.className="msg";
+
+if(me) div.classList.add("me");
+
+div.innerText=t;
+
+chat.appendChild(div);
+
+chat.scrollTop=chat.scrollHeight;
 
 }
-
-};
-
-file.onchange=()=>{
-
-let f=file.files[0];
-
-let reader=new FileReader();
-
-reader.onload=()=>{
-
-channel.send(JSON.stringify({
-type:"file",
-name:f.name,
-mime:f.type,
-data:reader.result
-}));
-
-};
-
-reader.readAsDataURL(f);
-
-};
 
 function copyCode(){
 
@@ -372,38 +247,28 @@ QRCode.toCanvas(qr,code.value);
 
 }
 
-async function voice(){
+function scanQR(){
 
-let stream=await navigator.mediaDevices.getUserMedia({audio:true});
+reader.style.display="block";
 
-let rec=new MediaRecorder(stream);
+const scanner=new Html5Qrcode("reader");
 
-let chunks=[];
+scanner.start(
+{facingMode:"environment"},
+{
+fps:10,
+qrbox:250
+},
+text=>{
 
-rec.ondataavailable=e=>chunks.push(e.data);
+code.value=text;
 
-rec.onstop=()=>{
+scanner.stop();
 
-let blob=new Blob(chunks);
+reader.style.display="none";
 
-let reader=new FileReader();
-
-reader.onload=()=>{
-
-channel.send(JSON.stringify({
-type:"voice",
-data:reader.result
-}));
-
-};
-
-reader.readAsDataURL(blob);
-
-};
-
-rec.start();
-
-setTimeout(()=>rec.stop(),3000);
+}
+);
 
 }
 
