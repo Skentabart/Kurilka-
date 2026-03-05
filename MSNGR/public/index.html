@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<title>Secure Messenger</title>
+
+<link rel="manifest" href="manifest.json">
+
+<style>
+
+body{
+margin:0;
+font-family:sans-serif;
+background:#0e0e0e;
+color:white;
+}
+
+#chat{
+height:80vh;
+overflow:auto;
+padding:10px;
+}
+
+.msg{
+background:#1f1f1f;
+padding:10px;
+margin:6px;
+border-radius:10px;
+max-width:80%;
+}
+
+img,video{
+max-width:220px;
+border-radius:10px;
+}
+
+#panel{
+position:fixed;
+bottom:0;
+width:100%;
+display:flex;
+background:#111;
+}
+
+input{
+flex:1;
+padding:10px;
+border:none;
+}
+
+button{
+padding:10px;
+background:#333;
+color:white;
+border:none;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div id="chat"></div>
+
+<div id="panel">
+
+<input id="msg" placeholder="message">
+
+<input type="file" id="file">
+
+<button id="send">Send</button>
+
+</div>
+
+<script src="crypto.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>
