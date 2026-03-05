@@ -3,16 +3,16 @@
 <head>
 
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
-<title>P2P Messenger</title>
+<title>Secure P2P Messenger</title>
 
 <style>
 
 body{
 margin:0;
 font-family:sans-serif;
-background:#111;
+background:#101010;
 color:white;
 display:flex;
 flex-direction:column;
@@ -20,8 +20,8 @@ height:100vh;
 }
 
 #top{
+background:#1a1a1a;
 padding:10px;
-background:#1c1c1c;
 }
 
 #code{
@@ -39,6 +39,11 @@ color:white;
 border-radius:6px;
 }
 
+#status{
+font-size:12px;
+color:#7cff7c;
+}
+
 #chat{
 flex:1;
 overflow:auto;
@@ -50,8 +55,8 @@ flex-direction:column;
 .msg{
 background:#222;
 padding:10px;
-border-radius:10px;
 margin:5px 0;
+border-radius:10px;
 max-width:80%;
 }
 
@@ -63,7 +68,7 @@ align-self:flex-end;
 #bottom{
 display:flex;
 padding:5px;
-background:#1c1c1c;
+background:#1a1a1a;
 }
 
 #msg{
@@ -75,13 +80,11 @@ border-radius:6px;
 
 #qr{
 display:none;
-width:250px;
 margin:auto;
 }
 
 #reader{
 display:none;
-width:100%;
 }
 
 </style>
@@ -96,11 +99,13 @@ width:100%;
 
 <br>
 
-<button onclick="createOffer()">Create connection</button>
+<button onclick="createOffer()">Create</button>
 <button onclick="createAnswer()">Connect</button>
-<button onclick="copyCode()">Copy code</button>
-<button onclick="showQR()">Show QR</button>
-<button onclick="scanQR()">Scan QR</button>
+<button onclick="finish()">Finish</button>
+
+<button onclick="copyCode()">Copy</button>
+<button onclick="showQR()">QR</button>
+<button onclick="scanQR()">Scan</button>
 
 <div id="status">Not connected</div>
 
@@ -120,18 +125,24 @@ width:100%;
 
 </div>
 
-<script src="https://unpkg.com/html5-qrcode"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode"></script>
 
 <script>
 
-let pc=new RTCPeerConnection();
+let pc = new RTCPeerConnection({
+
+iceServers:[
+{urls:"stun:stun.l.google.com:19302"}
+]
+
+});
 
 let channel;
 
 let connected=false;
 
-function log(t){
+function setStatus(t){
 status.innerText=t;
 }
 
@@ -144,7 +155,7 @@ function setupChannel(){
 
 channel.onopen=()=>{
 connected=true;
-log("Connected");
+setStatus("Connected");
 };
 
 channel.onmessage=e=>{
@@ -155,37 +166,41 @@ addMsg(e.data,false);
 
 async function createOffer(){
 
-channel=pc.createDataChannel("chat");
+channel = pc.createDataChannel("chat");
 
 setupChannel();
 
-let offer=await pc.createOffer();
+let offer = await pc.createOffer();
 
 await pc.setLocalDescription(offer);
 
 await waitIce();
 
-let codeStr=btoa(JSON.stringify(pc.localDescription));
-
-code.value=codeStr;
+code.value = btoa(JSON.stringify(pc.localDescription));
 
 }
 
 async function createAnswer(){
 
-let offer=JSON.parse(atob(code.value));
+let offer = JSON.parse(atob(code.value));
 
 await pc.setRemoteDescription(offer);
 
-let answer=await pc.createAnswer();
+let answer = await pc.createAnswer();
 
 await pc.setLocalDescription(answer);
 
 await waitIce();
 
-let codeStr=btoa(JSON.stringify(pc.localDescription));
+code.value = btoa(JSON.stringify(pc.localDescription));
 
-code.value=codeStr;
+}
+
+async function finish(){
+
+let answer = JSON.parse(atob(code.value));
+
+await pc.setRemoteDescription(answer);
 
 }
 
@@ -194,9 +209,7 @@ function waitIce(){
 return new Promise(resolve=>{
 
 pc.onicecandidate=e=>{
-
 if(!e.candidate) resolve();
-
 };
 
 });
@@ -207,7 +220,7 @@ function send(){
 
 if(!connected) return;
 
-let text=msg.value;
+let text = msg.value;
 
 channel.send(text);
 
@@ -254,11 +267,10 @@ reader.style.display="block";
 const scanner=new Html5Qrcode("reader");
 
 scanner.start(
+
 {facingMode:"environment"},
-{
-fps:10,
-qrbox:250
-},
+{fps:10,qrbox:250},
+
 text=>{
 
 code.value=text;
@@ -268,6 +280,7 @@ scanner.stop();
 reader.style.display="none";
 
 }
+
 );
 
 }
