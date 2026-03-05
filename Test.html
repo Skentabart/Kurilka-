@@ -1,1 +1,156 @@
+<!DOCTYPE html>
+<html>
+<head>
 
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+
+<title>P2P Secure Messenger</title>
+
+<style>
+
+body{
+margin:0;
+background:#0f0f0f;
+color:white;
+font-family:sans-serif;
+}
+
+#chat{
+height:85vh;
+overflow:auto;
+padding:10px;
+}
+
+.msg{
+background:#1f1f1f;
+padding:10px;
+margin:6px;
+border-radius:10px;
+}
+
+#panel{
+position:fixed;
+bottom:0;
+width:100%;
+display:flex;
+}
+
+input{
+flex:1;
+padding:10px;
+}
+
+button{
+padding:10px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div id="chat"></div>
+
+<div id="panel">
+
+<input id="msg" placeholder="message">
+
+<input type="file" id="file">
+
+<button onclick="send()">Send</button>
+
+</div>
+
+<script>
+
+let pc = new RTCPeerConnection();
+
+let channel = pc.createDataChannel("chat");
+
+channel.onmessage = e => receive(JSON.parse(e.data));
+
+pc.ondatachannel = e => {
+channel = e.channel;
+channel.onmessage = m => receive(JSON.parse(m.data));
+};
+
+async function start(){
+
+let offer = await pc.createOffer();
+await pc.setLocalDescription(offer);
+
+let code = btoa(JSON.stringify(offer));
+
+prompt("Send this code to friend",code);
+
+}
+
+async function join(){
+
+let code = prompt("Paste connection code");
+
+let offer = JSON.parse(atob(code));
+
+await pc.setRemoteDescription(offer);
+
+let answer = await pc.createAnswer();
+
+await pc.setLocalDescription(answer);
+
+alert(btoa(JSON.stringify(answer)));
+
+}
+
+pc.onicecandidate = e => {
+
+if(!e.candidate){
+
+console.log("ICE done");
+
+}
+
+};
+
+start();
+
+function send(){
+
+let text=document.getElementById("msg").value;
+
+channel.send(JSON.stringify({
+type:"text",
+text:text
+}));
+
+add(text);
+
+msg.value="";
+
+}
+
+function receive(data){
+
+if(data.type==="text"){
+add(data.text);
+}
+
+}
+
+function add(t){
+
+let div=document.createElement("div");
+
+div.className="msg";
+
+div.innerText=t;
+
+chat.appendChild(div);
+
+}
+
+</script>
+
+</body>
+</html>
