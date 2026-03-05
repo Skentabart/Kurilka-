@@ -1,271 +1,302 @@
 <!DOCTYPE html>
 <html>
 <head>
-
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Secure P2P Messenger</title>
 
-<title>QR P2P Messenger</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
 <style>
 
 body{
+font-family:Arial;
 margin:0;
-font-family:sans-serif;
-background:#111;
+background:#0f0f0f;
 color:white;
-display:flex;
+}
+
+#connect{
+padding:20px;
+text-align:center;
+}
+
+#chat{
+display:none;
 flex-direction:column;
 height:100vh;
 }
 
-#top{
-padding:10px;
-background:#1b1b1b;
-}
-
-button{
-padding:10px;
-margin:3px;
-border:none;
-background:#333;
-color:white;
-border-radius:6px;
-}
-
-#chat{
+#messages{
 flex:1;
 overflow:auto;
 padding:10px;
-display:flex;
-flex-direction:column;
 }
 
 .msg{
-background:#222;
+background:#1c1c1c;
 padding:10px;
-margin:5px 0;
+margin:5px;
 border-radius:10px;
-max-width:80%;
 }
 
 .me{
-background:#2e63ff;
-align-self:flex-end;
+background:#0040ff;
 }
 
-#bottom{
-display:flex;
-padding:5px;
-background:#1b1b1b;
-}
-
-#msg{
-flex:1;
+input,button{
 padding:10px;
+border-radius:10px;
 border:none;
-border-radius:6px;
+margin:5px;
+}
+
+button{
+background:#2c7cff;
+color:white;
+}
+
+#inputRow{
+display:flex;
+padding:10px;
+background:#111;
+}
+
+#inputRow input{
+flex:1;
+}
+
+video,img{
+max-width:100%;
+border-radius:10px;
 }
 
 #qr{
-margin:auto;
+margin-top:20px;
 }
 
-#reader{
-display:none;
+textarea{
+width:100%;
+height:120px;
 }
 
 </style>
-
 </head>
 
 <body>
 
-<div id="top">
+<div id="connect">
 
-<button onclick="createRoom()">Create QR</button>
-<button onclick="scanQR()">Scan QR</button>
+<h2>Secure Messenger</h2>
 
-<div id="status">Not connected</div>
+<button onclick="createConnection()">Создать подключение</button>
 
-</div>
+<div id="qr"></div>
 
-<canvas id="qr"></canvas>
+<hr>
 
-<div id="reader"></div>
+<textarea id="pasteOffer" placeholder="Вставьте код подключения"></textarea>
 
-<div id="chat"></div>
+<button onclick="connectByCode()">Подключиться</button>
 
-<div id="bottom">
+<br><br>
 
-<input id="msg" placeholder="message">
-
-<button onclick="send()">Send</button>
+<input type="file" accept="image/*" capture="environment" id="scanQR" style="display:none">
 
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
-<script src="https://unpkg.com/html5-qrcode"></script>
+<div id="chat">
+
+<div id="messages"></div>
+
+<div id="inputRow">
+<input id="text" placeholder="Сообщение">
+<button onclick="sendMsg()">Send</button>
+<button onclick="sendFile()">File</button>
+</div>
+
+<input type="file" id="fileInput" style="display:none">
+
+</div>
 
 <script>
 
-let roomId=null
-let socket=null
-
-let pc=new RTCPeerConnection({
-iceServers:[{urls:"stun:stun.l.google.com:19302"}]
-})
-
+let pc = new RTCPeerConnection()
 let channel
 
-function log(t){
-status.innerText=t
-}
-
-pc.ondatachannel=e=>{
+pc.ondatachannel = e=>{
 channel=e.channel
 setupChannel()
 }
 
 function setupChannel(){
 
-channel.onopen=()=>log("Connected")
+document.getElementById("chat").style.display="flex"
+document.getElementById("connect").style.display="none"
 
-channel.onmessage=e=>addMsg(e.data,false)
-
-}
-
-function connectSignal(){
-
-socket=new WebSocket("wss://signal.simplewebrtc.com")
-
-socket.onopen=()=>{
-socket.send(JSON.stringify({
-type:"join",
-room:roomId
-}))
-}
-
-socket.onmessage=async msg=>{
-
-let data=JSON.parse(msg.data)
-
-if(data.offer){
-
-await pc.setRemoteDescription(data.offer)
-
-let answer=await pc.createAnswer()
-
-await pc.setLocalDescription(answer)
-
-socket.send(JSON.stringify({
-answer:pc.localDescription,
-room:roomId
-}))
-
-}
-
-if(data.answer){
-
-await pc.setRemoteDescription(data.answer)
-
-}
-
-if(data.ice){
-
-pc.addIceCandidate(data.ice)
-
+channel.onmessage=e=>{
+receive(e.data)
 }
 
 }
+
+function createConnection(){
+
+channel = pc.createDataChannel("chat")
+
+setupChannel()
+
+pc.createOffer().then(o=>{
+pc.setLocalDescription(o)
+
+setTimeout(()=>{
+
+let code=btoa(JSON.stringify(pc.localDescription))
+
+showQR(code)
+
+},1000)
+
+})
+
+}
+
+function connectByCode(){
+
+let code=document.getElementById("pasteOffer").value
+
+let desc=JSON.parse(atob(code))
+
+pc.setRemoteDescription(desc)
+
+pc.createAnswer().then(a=>{
+pc.setLocalDescription(a)
+
+alert("Отправьте ответ обратно")
+
+console.log(btoa(JSON.stringify(a)))
+
+})
 
 }
 
 pc.onicecandidate=e=>{
-if(e.candidate){
-socket.send(JSON.stringify({
-ice:e.candidate,
-room:roomId
+if(!e.candidate){
+
+let code=btoa(JSON.stringify(pc.localDescription))
+
+console.log(code)
+
+}
+}
+
+function showQR(text){
+
+let canvas=document.createElement("canvas")
+let size=250
+canvas.width=size
+canvas.height=size
+
+let ctx=canvas.getContext("2d")
+
+ctx.fillStyle="#fff"
+ctx.fillRect(0,0,size,size)
+
+let hash=0
+
+for(let i=0;i<text.length;i++){
+hash=text.charCodeAt(i)+((hash<<5)-hash)
+}
+
+for(let y=0;y<25;y++){
+for(let x=0;x<25;x++){
+
+let v=Math.abs(Math.sin(hash+x*y))*1000
+
+if(v%2>1){
+ctx.fillStyle="#000"
+ctx.fillRect(x*10,y*10,10,10)
+}
+
+}
+}
+
+document.getElementById("qr").appendChild(canvas)
+
+}
+
+function sendMsg(){
+
+let text=document.getElementById("text").value
+
+channel.send(JSON.stringify({
+type:"text",
+data:text
 }))
-}
-}
-
-async function createRoom(){
-
-roomId=Math.random().toString(36).substring(2)
-
-connectSignal()
-
-channel=pc.createDataChannel("chat")
-
-setupChannel()
-
-let offer=await pc.createOffer()
-
-await pc.setLocalDescription(offer)
-
-socket.send(JSON.stringify({
-offer:pc.localDescription,
-room:roomId
-}))
-
-QRCode.toCanvas(qr,roomId)
-
-}
-
-function scanQR(){
-
-reader.style.display="block"
-
-const scanner=new Html5Qrcode("reader")
-
-scanner.start(
-{facingMode:"environment"},
-{fps:10,qrbox:250},
-
-text=>{
-
-roomId=text
-
-scanner.stop()
-
-reader.style.display="none"
-
-connectSignal()
-
-}
-
-)
-
-}
-
-function send(){
-
-if(!channel) return
-
-let text=msg.value
-
-channel.send(text)
 
 addMsg(text,true)
 
-msg.value=""
+document.getElementById("text").value=""
 
 }
 
-function addMsg(t,me){
+function sendFile(){
+
+document.getElementById("fileInput").click()
+
+}
+
+document.getElementById("fileInput").onchange=e=>{
+
+let file=e.target.files[0]
+
+let reader=new FileReader()
+
+reader.onload=()=>{
+
+channel.send(JSON.stringify({
+type:"file",
+name:file.name,
+data:reader.result
+}))
+
+}
+
+reader.readAsDataURL(file)
+
+}
+
+function receive(data){
+
+let obj=JSON.parse(data)
+
+if(obj.type==="text"){
+addMsg(obj.data,false)
+}
+
+if(obj.type==="file"){
+
+if(obj.data.startsWith("data:image")){
+addMsg('<img src="'+obj.data+'">')
+}
+else if(obj.data.startsWith("data:video")){
+addMsg('<video controls src="'+obj.data+'"></video>')
+}
+else{
+addMsg('<a href="'+obj.data+'" download="'+obj.name+'">'+obj.name+'</a>')
+}
+
+}
+
+}
+
+function addMsg(text,me){
 
 let div=document.createElement("div")
+div.className="msg"+(me?" me":"")
 
-div.className="msg"
+div.innerHTML=text
 
-if(me) div.classList.add("me")
-
-div.innerText=t
-
-chat.appendChild(div)
-
-chat.scrollTop=chat.scrollHeight
+document.getElementById("messages").appendChild(div)
 
 }
 
