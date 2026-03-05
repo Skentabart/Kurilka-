@@ -3,16 +3,16 @@
 <head>
 
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 
-<title>Secure P2P Messenger</title>
+<title>QR P2P Messenger</title>
 
 <style>
 
 body{
 margin:0;
 font-family:sans-serif;
-background:#101010;
+background:#111;
 color:white;
 display:flex;
 flex-direction:column;
@@ -20,28 +20,17 @@ height:100vh;
 }
 
 #top{
-background:#1a1a1a;
 padding:10px;
-}
-
-#code{
-width:100%;
-padding:10px;
-margin-bottom:5px;
+background:#1b1b1b;
 }
 
 button{
 padding:10px;
-margin:2px;
+margin:3px;
 border:none;
 background:#333;
 color:white;
 border-radius:6px;
-}
-
-#status{
-font-size:12px;
-color:#7cff7c;
 }
 
 #chat{
@@ -68,7 +57,7 @@ align-self:flex-end;
 #bottom{
 display:flex;
 padding:5px;
-background:#1a1a1a;
+background:#1b1b1b;
 }
 
 #msg{
@@ -79,7 +68,6 @@ border-radius:6px;
 }
 
 #qr{
-display:none;
 margin:auto;
 }
 
@@ -95,17 +83,8 @@ display:none;
 
 <div id="top">
 
-<input id="code" placeholder="connection code">
-
-<br>
-
-<button onclick="createOffer()">Create</button>
-<button onclick="createAnswer()">Connect</button>
-<button onclick="finish()">Finish</button>
-
-<button onclick="copyCode()">Copy</button>
-<button onclick="showQR()">QR</button>
-<button onclick="scanQR()">Scan</button>
+<button onclick="createRoom()">Create QR</button>
+<button onclick="scanQR()">Scan QR</button>
 
 <div id="status">Not connected</div>
 
@@ -130,158 +109,163 @@ display:none;
 
 <script>
 
-let pc = new RTCPeerConnection({
+let roomId=null
+let socket=null
 
-iceServers:[
-{urls:"stun:stun.l.google.com:19302"}
-]
+let pc=new RTCPeerConnection({
+iceServers:[{urls:"stun:stun.l.google.com:19302"}]
+})
 
-});
+let channel
 
-let channel;
-
-let connected=false;
-
-function setStatus(t){
-status.innerText=t;
+function log(t){
+status.innerText=t
 }
 
 pc.ondatachannel=e=>{
-channel=e.channel;
-setupChannel();
-};
+channel=e.channel
+setupChannel()
+}
 
 function setupChannel(){
 
-channel.onopen=()=>{
-connected=true;
-setStatus("Connected");
-};
+channel.onopen=()=>log("Connected")
 
-channel.onmessage=e=>{
-addMsg(e.data,false);
-};
+channel.onmessage=e=>addMsg(e.data,false)
 
 }
 
-async function createOffer(){
+function connectSignal(){
 
-channel = pc.createDataChannel("chat");
+socket=new WebSocket("wss://signal.simplewebrtc.com")
 
-setupChannel();
+socket.onopen=()=>{
+socket.send(JSON.stringify({
+type:"join",
+room:roomId
+}))
+}
 
-let offer = await pc.createOffer();
+socket.onmessage=async msg=>{
 
-await pc.setLocalDescription(offer);
+let data=JSON.parse(msg.data)
 
-await waitIce();
+if(data.offer){
 
-code.value = btoa(JSON.stringify(pc.localDescription));
+await pc.setRemoteDescription(data.offer)
+
+let answer=await pc.createAnswer()
+
+await pc.setLocalDescription(answer)
+
+socket.send(JSON.stringify({
+answer:pc.localDescription,
+room:roomId
+}))
 
 }
 
-async function createAnswer(){
+if(data.answer){
 
-let offer = JSON.parse(atob(code.value));
-
-await pc.setRemoteDescription(offer);
-
-let answer = await pc.createAnswer();
-
-await pc.setLocalDescription(answer);
-
-await waitIce();
-
-code.value = btoa(JSON.stringify(pc.localDescription));
+await pc.setRemoteDescription(data.answer)
 
 }
 
-async function finish(){
+if(data.ice){
 
-let answer = JSON.parse(atob(code.value));
-
-await pc.setRemoteDescription(answer);
+pc.addIceCandidate(data.ice)
 
 }
 
-function waitIce(){
+}
 
-return new Promise(resolve=>{
+}
 
 pc.onicecandidate=e=>{
-if(!e.candidate) resolve();
-};
-
-});
-
+if(e.candidate){
+socket.send(JSON.stringify({
+ice:e.candidate,
+room:roomId
+}))
+}
 }
 
-function send(){
+async function createRoom(){
 
-if(!connected) return;
+roomId=Math.random().toString(36).substring(2)
 
-let text = msg.value;
+connectSignal()
 
-channel.send(text);
+channel=pc.createDataChannel("chat")
 
-addMsg(text,true);
+setupChannel()
 
-msg.value="";
+let offer=await pc.createOffer()
 
-}
+await pc.setLocalDescription(offer)
 
-function addMsg(t,me){
+socket.send(JSON.stringify({
+offer:pc.localDescription,
+room:roomId
+}))
 
-let div=document.createElement("div");
-
-div.className="msg";
-
-if(me) div.classList.add("me");
-
-div.innerText=t;
-
-chat.appendChild(div);
-
-chat.scrollTop=chat.scrollHeight;
-
-}
-
-function copyCode(){
-
-navigator.clipboard.writeText(code.value);
-
-}
-
-function showQR(){
-
-qr.style.display="block";
-
-QRCode.toCanvas(qr,code.value);
+QRCode.toCanvas(qr,roomId)
 
 }
 
 function scanQR(){
 
-reader.style.display="block";
+reader.style.display="block"
 
-const scanner=new Html5Qrcode("reader");
+const scanner=new Html5Qrcode("reader")
 
 scanner.start(
-
 {facingMode:"environment"},
 {fps:10,qrbox:250},
 
 text=>{
 
-code.value=text;
+roomId=text
 
-scanner.stop();
+scanner.stop()
 
-reader.style.display="none";
+reader.style.display="none"
+
+connectSignal()
 
 }
 
-);
+)
+
+}
+
+function send(){
+
+if(!channel) return
+
+let text=msg.value
+
+channel.send(text)
+
+addMsg(text,true)
+
+msg.value=""
+
+}
+
+function addMsg(t,me){
+
+let div=document.createElement("div")
+
+div.className="msg"
+
+if(me) div.classList.add("me")
+
+div.innerText=t
+
+chat.appendChild(div)
+
+chat.scrollTop=chat.scrollHeight
 
 }
 
