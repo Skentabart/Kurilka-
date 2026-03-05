@@ -3,21 +3,56 @@
 <head>
 
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
-<title>P2P Secure Messenger</title>
+<title>Secure P2P Messenger</title>
 
 <style>
 
 body{
 margin:0;
+font-family:sans-serif;
 background:#0f0f0f;
 color:white;
-font-family:sans-serif;
+display:flex;
+flex-direction:column;
+height:100vh;
+}
+
+#top{
+padding:10px;
+background:#1b1b1b;
+display:flex;
+flex-direction:column;
+gap:6px;
+}
+
+#code{
+width:100%;
+padding:8px;
+}
+
+#buttons{
+display:flex;
+gap:5px;
+}
+
+button{
+flex:1;
+padding:10px;
+background:#333;
+border:none;
+color:white;
+border-radius:6px;
+}
+
+#status{
+font-size:12px;
+color:#7cff7c;
 }
 
 #chat{
-height:85vh;
+flex:1;
 overflow:auto;
 padding:10px;
 }
@@ -25,24 +60,43 @@ padding:10px;
 .msg{
 background:#1f1f1f;
 padding:10px;
-margin:6px;
+margin:5px 0;
 border-radius:10px;
+max-width:80%;
+word-wrap:break-word;
 }
 
-#panel{
-position:fixed;
-bottom:0;
-width:100%;
+.me{
+background:#2e5fff;
+align-self:flex-end;
+}
+
+img,video{
+max-width:200px;
+border-radius:8px;
+margin-top:5px;
+}
+
+#bottom{
+
 display:flex;
+padding:6px;
+background:#1b1b1b;
+gap:5px;
+
 }
 
-input{
+#msg{
+
 flex:1;
 padding:10px;
+border:none;
+border-radius:6px;
+
 }
 
-button{
-padding:10px;
+#file{
+display:none;
 }
 
 </style>
@@ -51,15 +105,35 @@ padding:10px;
 
 <body>
 
+<div id="top">
+
+<input id="code" placeholder="connection code">
+
+<div id="buttons">
+
+<button onclick="createConn()">Create</button>
+
+<button onclick="joinConn()">Connect</button>
+
+<button onclick="copyCode()">Copy</button>
+
+</div>
+
+<div id="status">Not connected</div>
+
+</div>
+
 <div id="chat"></div>
 
-<div id="panel">
+<div id="bottom">
 
 <input id="msg" placeholder="message">
 
-<input type="file" id="file">
+<button onclick="sendMsg()">Send</button>
 
-<button onclick="send()">Send</button>
+<button onclick="file.click()">📎</button>
+
+<input type="file" id="file">
 
 </div>
 
@@ -67,31 +141,51 @@ padding:10px;
 
 let pc = new RTCPeerConnection();
 
-let channel = pc.createDataChannel("chat");
+let channel;
 
-channel.onmessage = e => receive(JSON.parse(e.data));
+let connected=false;
 
-pc.ondatachannel = e => {
-channel = e.channel;
-channel.onmessage = m => receive(JSON.parse(m.data));
+function setStatus(t){
+status.innerText=t;
+}
+
+pc.ondatachannel=e=>{
+channel=e.channel;
+setupChannel();
 };
 
-async function start(){
+function setupChannel(){
 
-let offer = await pc.createOffer();
-await pc.setLocalDescription(offer);
+channel.onopen=()=>{
+connected=true;
+setStatus("Connected");
+};
 
-let code = btoa(JSON.stringify(offer));
-
-prompt("Send this code to friend",code);
+channel.onmessage=e=>{
+receive(JSON.parse(e.data));
+};
 
 }
 
-async function join(){
+async function createConn(){
 
-let code = prompt("Paste connection code");
+channel = pc.createDataChannel("chat");
 
-let offer = JSON.parse(atob(code));
+setupChannel();
+
+let offer = await pc.createOffer();
+
+await pc.setLocalDescription(offer);
+
+await waitIce();
+
+code.value=btoa(JSON.stringify(pc.localDescription));
+
+}
+
+async function joinConn(){
+
+let offer = JSON.parse(atob(code.value));
 
 await pc.setRemoteDescription(offer);
 
@@ -99,54 +193,145 @@ let answer = await pc.createAnswer();
 
 await pc.setLocalDescription(answer);
 
-alert(btoa(JSON.stringify(answer)));
+await waitIce();
+
+code.value=btoa(JSON.stringify(pc.localDescription));
 
 }
 
-pc.onicecandidate = e => {
+pc.onicecandidate=e=>{};
+
+function waitIce(){
+
+return new Promise(resolve=>{
+
+pc.onicecandidate=e=>{
 
 if(!e.candidate){
-
-console.log("ICE done");
-
+resolve();
 }
 
 };
 
-start();
+});
 
-function send(){
+}
 
-let text=document.getElementById("msg").value;
+function addMsg(text,me=false){
 
-channel.send(JSON.stringify({
-type:"text",
-text:text
-}));
+let div=document.createElement("div");
 
-add(text);
+div.className="msg";
 
-msg.value="";
+if(me) div.classList.add("me");
+
+div.innerText=text;
+
+chat.appendChild(div);
+
+chat.scrollTop=chat.scrollHeight;
 
 }
 
 function receive(data){
 
 if(data.type==="text"){
-add(data.text);
-}
+
+addMsg(data.text);
 
 }
 
-function add(t){
+if(data.type==="file"){
 
 let div=document.createElement("div");
 
 div.className="msg";
 
-div.innerText=t;
+if(data.mime.startsWith("image")){
+
+let img=document.createElement("img");
+
+img.src=data.data;
+
+div.appendChild(img);
+
+}
+
+else if(data.mime.startsWith("video")){
+
+let v=document.createElement("video");
+
+v.src=data.data;
+
+v.controls=true;
+
+div.appendChild(v);
+
+}
+
+else{
+
+let a=document.createElement("a");
+
+a.href=data.data;
+
+a.download=data.name;
+
+a.innerText="Download "+data.name;
+
+div.appendChild(a);
+
+}
 
 chat.appendChild(div);
+
+}
+
+}
+
+async function sendMsg(){
+
+if(!connected) return;
+
+let text=msg.value;
+
+if(!text) return;
+
+channel.send(JSON.stringify({
+type:"text",
+text:text
+}));
+
+addMsg(text,true);
+
+msg.value="";
+
+}
+
+file.onchange=()=>{
+
+let f=file.files[0];
+
+let reader=new FileReader();
+
+reader.onload=()=>{
+
+channel.send(JSON.stringify({
+type:"file",
+name:f.name,
+mime:f.type,
+data:reader.result
+}));
+
+};
+
+reader.readAsDataURL(f);
+
+};
+
+function copyCode(){
+
+navigator.clipboard.writeText(code.value);
 
 }
 
